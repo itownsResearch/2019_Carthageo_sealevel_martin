@@ -18,16 +18,15 @@ import {iso_1_config, iso_5_config} from './layers/isolines'
 import iso_1 from './layers/iso_1'
 import iso_5 from './layers/iso_5'
 import WORLD_DTM from './layers/WORLD_DTM'
-import { bati, shadMat } from './layers/bati'
-import { batiRem, shadMatRem } from './layers/bati_remarquable'
-
+import {bati, ShadMatRoof, ShadMatWalls, ShadMatEdges} from './layers/bati'
+import {batiRem, ShadMatRoofRem, ShadMatWallsRem, ShadMatEdgesRem} from './layers/bati_remarquable'
 
 // around Bordeaux
 let positionOnGlobe = { longitude: -0.525, latitude: 44.85, altitude: 250 };
 let coords = { lon: -0.650, lat: 44.905, deltaLon: 0.160, deltaLat: -0.110 };
 // île de Ré
-positionOnGlobe = { longitude: -1.412, latitude: 46.208, altitude: 10000 };
-coords = { lon: -1.563, lat: 46.256, deltaLon: 0.300, deltaLat: -0.150 };
+positionOnGlobe = { longitude: -1.3918304443359375, latitude: 46.1865234375, altitude: 80 };
+coords = { lon: -1.3918304443359375, lat: 46.1865234375, deltaLon: 0.300, deltaLat: -0.150 };
 
 const viewerDiv = document.getElementById('viewerDiv');
 const htmlInfo = document.getElementById('info');
@@ -37,7 +36,7 @@ const boardInfo = document.getElementById('boardSpace');
 // We modified some code in itowns and created an issue https://github.com/iTowns/itowns/issues/910
 let options = { segments: 128 }; // We specify a more refined tile geomtry than default 16*16
 const globeView = new itowns.GlobeView(viewerDiv, positionOnGlobe, options);
-const menuGlobe = new GuiTools('menuDiv', globeView)
+const menuGlobe = new GuiTools('menuDiv', globeView);
 
 // I have to call it twice to make it works, even if i destroy the result immediately, don't ask why..
 let liness = createLinks(scenario);
@@ -57,8 +56,6 @@ function adjustAltitude(value) {
     var displacement = value;
     globeView.setDisplacementZ(displacement);
     globeView.notifyChange();
-    console.log(displacement);
-
 }
 
 // Set water representation mode in shaders
@@ -69,12 +66,11 @@ function setMode(value) {
 }
 
 //passing value to the buildings shaders
-function adjustBuildingColors(value) {
+/*function adjustBuildingColors(value) {
     shadMat.uniforms.waterLevel.value = value;
     shadMatRem.uniforms.waterLevel.value = value;
-}
+}*/
 
-//changing visibility of lines according to the scenario
 function setLinesVisibility(lines, value){
     for(let i = 0; i < lines.length ; ++i) {
         lines[i].visible = (value >= scenario.links[i].hauteur_dysf);
@@ -82,16 +78,13 @@ function setLinesVisibility(lines, value){
 }
 
 globeView.addLayer(Ortho);
-//globeView.addLayer(Slopes);
 globeView.addLayer(DARK);
 globeView.addLayer(WORLD_DTM);
 globeView.addLayer(IGN_MNT_HR);
 globeView.addLayer(bati);
 globeView.addLayer(batiRem);
 globeView.addLayer(iso_1)
-globeView.addLayer(iso_5)
-//globeView.addLayer(iso_1_config);
-//globeView.addLayer(iso_5_config);
+globeView.addLayer(iso_5);
 
 const irisLayer = {
     type: 'color',
@@ -112,12 +105,6 @@ const irisLayer = {
 };
 
 globeView.addLayer(irisLayer);
-//Create the source
-// const tmsSource = new itowns.TMSSource(iso_4);
-
-// const colorLayer = new itowns.ColorLayer('iso_4', {
-//     source: tmsSource,
-// });
 
 
 /*************************************** WATER A.D ***********************************************/
@@ -155,85 +142,185 @@ itowns.Fetcher.json('./layers/JSONLayers/OPENSM.json').then(function _(osm) {
     itowns.View.prototype.addLayer.call(globeView, osm, globeWater);
 });
 */
+
+
+
 /**************************************************************************************************/
 
 let time = 0;
 let currentWaterLevel = { val: 0 };
 globeView.addEventListener(itowns.GLOBE_VIEW_EVENTS.GLOBE_INITIALIZED, () => {
+    const menuGlobe = new GuiTools('menuDiv', globeView);
     globeView.controls.minDistance = 50;  // Allows the camera to get closer to the ground
-    console.log('globe initialized ?', globeView);
     addtoscene(lines);
 
     menuGlobe.addImageryLayersGUI(globeView.getLayers(l => l.type === 'color'));
-    menuGlobe.addGeometryLayersGUI(globeView.getLayers(l => l.type === 'geometry' && l.id != 'globe'));
+    menuGlobe.addGeometryLayersGUI(globeView.getLayers(l => l.type === 'geometry' && l.id != 'globe'), ShadMatRoof, ShadMatWalls, ShadMatEdges, ShadMatRoofRem, ShadMatWallsRem, ShadMatEdgesRem);
 
-    menuGlobe.gui.add({ HauteurdEau: 0.1 }, 'HauteurdEau').min(0.1).max(6).onChange((
-        function updateWaterLevel(value) {
-            adjustAltitude(value);
-            adjustBuildingColors(value);
-            setLinesVisibility(lines, value);
-            changeBoardInfos(value);
-            currentWaterLevel.val = value;
+    menuGlobe.gui.add({wallMode : ShadMatWalls.uniforms.mode.value}, 'wallMode').min(0).max(2).step(1).onChange(
+      function updateWallMode(value){
+            ShadMatWalls.uniforms.mode.value = value;
             globeView.notifyChange(true);
-        }));
+      }
+    );
 
-    menuGlobe.gui.add({ Niveaux: false}, 'Niveaux').onChange(function updateWaterLevel(value) {
-        setMode(value ? 1 : 0);
-        var legende = document.getElementById("batchLegende");
-        console.log(legende);
-        legende.style = value ? "visibility: visible" : "visibility: hidden";
-    });
 
-    menuGlobe.gui.add({ Abstraction: true}, 'Abstraction').onChange(function updateWaterLevel(value) {
-        var layer = globeView.getLayers(l => l.id === 'DARK')[0];
-        layer.opacity = value ? 1 : 0;
-        globeView.notifyChange(layer);
-    });
+    menuGlobe.gui.add({roofMode : ShadMatRoof.uniforms.mode.value}, 'roofMode').min(0).max(2).step(1).onChange(
+      function updateRoofMode(value){
+            ShadMatRoof.uniforms.mode.value = value;
+            globeView.notifyChange(true);
+      }
+    );
 
-    menuGlobe.gui.add({ TransparenceEau: false}, 'TransparenceEau').onChange(function updateWaterLevel(value) {
-        console.log(globeView);
-        globeWater.opacity = value ?  0.6: 0.9999;
-        globeView.notifyChange();
-    });
 
-    //createLegend();
+    menuGlobe.gui.add({edgesMode : ShadMatEdges.uniforms.mode.value}, 'edgesMode').min(0).max(2).step(1).onChange(
+      function updateEdgesMode(value){
+            ShadMatEdges.uniforms.mode.value = value;
+            globeView.notifyChange(true);
+      }
+    );
 
-    /*    
-    menuGlobe.gui.add({ mode: 0 }, 'mode').min(0).max(3).step(1).onChange((
-        function updateWaterMode(value) {
-            setMode(value);
-        }
-    ));
-    */
 
-    let t = new ToolTip(globeView, document.getElementById('tooltipDiv'), currentWaterLevel, scenario);
-    adjustAltitude(0.1);
-    animateLines();
-    window.addEventListener('click', picking, false);
+    menuGlobe.gui.add({wallScale : 0.1}, 'wallScale').min(0.1).max(1).onChange(
+      function updateScaleWallTexture(value){
+            ShadMatWalls.uniforms.texture_scale.value = value;
+            globeView.notifyChange(true);
+      }
+    );
+
+    menuGlobe.gui.add({roofScale : 0.1}, 'roofScale').min(0.1).max(1).onChange(
+      function updateScaleRoofTexture(value){
+            ShadMatRoof.uniforms.texture_scale.value = value;
+            globeView.notifyChange(true);
+      }
+    );
+
+    menuGlobe.gui.add({wallOpacity : 1.0}, 'wallOpacity').min(0.1).max(1).onChange(
+      function updateOpacityWall(value){
+            ShadMatWalls.uniforms.opacity.value = value;
+            globeView.notifyChange(true);
+      }
+    );
+
+    menuGlobe.gui.add({roofOpacity : 1.0}, 'roofOpacity').min(0.1).max(1).onChange(
+      function updateOpacityRoof(value){
+            ShadMatRoof.uniforms.opacity.value = value;
+            globeView.notifyChange(true);
+      }
+    );
+
+    menuGlobe.gui.add({edgeOpacity : 1.0}, 'edgeOpacity').min(0.1).max(1).onChange(
+      function updateOpacityEdge(value){
+            ShadMatEdges.uniforms.opacity.value = value;
+            globeView.notifyChange(true);
+      }
+    );
+
+    menuGlobe.gui.addColor({wallColor : ShadMatWalls.uniforms.color.value.getHex()}, 'wallColor').onChange(
+      function updateColorWall(value){
+            ShadMatWalls.uniforms.color.value = new THREE.Color(value);
+            globeView.notifyChange(true);
+      }
+    );
+
+    menuGlobe.gui.addColor({roofColor : ShadMatRoof.uniforms.color.value.getHex()}, 'roofColor').onChange(
+      function updateColorRoof(value){
+            ShadMatRoof.uniforms.color.value = new THREE.Color(value);
+            globeView.notifyChange(true);
+      }
+    );
+
+    menuGlobe.gui.addColor({edgeColor : ShadMatEdges.uniforms.color.value.getHex()}, 'edgeColor').onChange(
+      function updateColorEdge(value){
+            ShadMatEdges.uniforms.color.value = new THREE.Color(value);
+            globeView.notifyChange(true);
+      }
+    );
+
+    /* The same as before : controllers which impacts WFS Buidlings Remarquable parameters such as color, texture, opacity, ... */
+
+    menuGlobe.gui.add({wallModeRem : ShadMatWallsRem.uniforms.mode.value}, 'wallModeRem').min(0).max(2).step(1).onChange(
+      function updateWallMode(value){
+            ShadMatWallsRem.uniforms.mode.value = value;
+            globeView.notifyChange(true);
+      }
+    );
+
+
+    menuGlobe.gui.add({roofModeRem : ShadMatRoofRem.uniforms.mode.value}, 'roofModeRem').min(0).max(2).step(1).onChange(
+      function updateRoofMode(value){
+            ShadMatRoofRem.uniforms.mode.value = value;
+            globeView.notifyChange(true);
+      }
+    );
+
+
+    menuGlobe.gui.add({edgesModeRem : ShadMatEdgesRem.uniforms.mode.value}, 'edgesModeRem').min(0).max(2).step(1).onChange(
+      function updateEdgesMode(value){
+            ShadMatEdgesRem.uniforms.mode.value = value;
+            globeView.notifyChange(true);
+      }
+    );
+
+
+    menuGlobe.gui.add({wallScaleRem : 0.1}, 'wallScaleRem').min(0.1).max(1).onChange(
+      function updateScaleWallTexture(value){
+            ShadMatWallsRem.uniforms.texture_scale.value = value;
+            globeView.notifyChange(true);
+      }
+    );
+
+    menuGlobe.gui.add({roofScaleRem : 0.1}, 'roofScaleRem').min(0.1).max(1).onChange(
+      function updateScaleRoofTexture(value){
+            ShadMatRoofRem.uniforms.texture_scale.value = value;
+            globeView.notifyChange(true);
+      }
+    );
+
+    menuGlobe.gui.add({wallOpacityRem : 1.0}, 'wallOpacityRem').min(0.1).max(1).onChange(
+      function updateOpacityWall(value){
+            ShadMatWallsRem.uniforms.opacity.value = value;
+            globeView.notifyChange(true);
+      }
+    );
+
+    menuGlobe.gui.add({roofOpacityRem : 1.0}, 'roofOpacityRem').min(0.1).max(1).onChange(
+      function updateOpacityRoof(value){
+            ShadMatRoofRem.uniforms.opacity.value = value;
+            globeView.notifyChange(true);
+      }
+    );
+
+    menuGlobe.gui.add({edgeOpacityRem : 1.0}, 'edgeOpacityRem').min(0.1).max(1).onChange(
+      function updateOpacityEdge(value){
+            ShadMatEdgesRem.uniforms.opacity.value = value;
+            globeView.notifyChange(true);
+      }
+    );
+
+    menuGlobe.gui.addColor({wallColorRem : ShadMatWallsRem.uniforms.color.value.getHex()}, 'wallColorRem').onChange(
+      function updateColorWall(value){
+            ShadMatWallsRem.uniforms.color.value = new THREE.Color(value);
+            globeView.notifyChange(true);
+      }
+    );
+
+    menuGlobe.gui.addColor({roofColorRem : ShadMatRoofRem.uniforms.color.value.getHex()}, 'roofColorRem').onChange(
+      function updateColorRoof(value){
+            ShadMatRoofRem.uniforms.color.value = new THREE.Color(value);
+            globeView.notifyChange(true);
+      }
+    );
+
+    menuGlobe.gui.addColor({edgeColorRem : ShadMatEdgesRem.uniforms.color.value.getHex()}, 'edgeColorRem').onChange(
+      function updateColorEdge(value){
+            ShadMatEdgesRem.uniforms.color.value = new THREE.Color(value);
+            globeView.notifyChange(true);
+      }
+    );
+
 });
 
-/*
-function createLegend(){
-    var Col = function() {
-
-        this.color0 = "#ffae23"; // CSS string
-        this.color1 = [ 0, 128, 255 ]; // RGB array
-        this.color2 = [ 0, 128, 255, 0.3 ]; // RGB with alpha
-        this.color3 = { h: 350, s: 0.9, v: 0.3 }; // Hue, saturation, value
-
-      };
-      
-     // window.onload = function() {
-        var text = new Col();
-        var gui = new dat.GUI();
-      
-        gui.addColor(text, 'color0');
-        gui.addColor(text, 'color1');
-        gui.addColor(text, 'color2');
-        gui.addColor(text, 'color3');
-     // };
-}
-*/
 
 // from itowns examples, can't say I really understand what is going on...
 function picking(event) {
@@ -255,15 +342,12 @@ function picking(event) {
                 if (key[0] !== '_' && key !== 'geometry_name') {
                     info = value.toString();
                     htmlInfo.innerHTML += '<li><b>' + key + ': </b>' + info + '</li>';
-                    //console.log('geom ', geometry[id]);
                 }
             });
             if (properties['nature'] === 'Mairie') {
                 // getting some bullshit info
                 let coords = globeView.controls.pickGeoPosition(globeView.eventToViewCoords(event));
                 htmlInfo.innerHTML += '<p class="beware">' + mairies[properties['id']]['text'] + '</p>'
-                console.log('coords', coords.as('EPSG:4978').xyz());
-                //console.log('geometry ', geometry[id]);
             }
         }
     }
@@ -302,4 +386,3 @@ function animateLines() {
     globeView.notifyChange(true);
     requestAnimationFrame(animateLines);
 };
-

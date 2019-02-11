@@ -1,10 +1,7 @@
-/* global itowns, document */
-// eslint-disable-next-line no-unused-vars
 import * as itowns from 'itowns'
 
 export function ToolTip(viewer, tooltip, currentWaterLevel, scenario, precisionPx) {
     var mouseDown = 0;
-    //var layers = viewer.getLayers(function _(l) { return l.source && l.source.protocol === 'file'; });
     var layers = viewer.getLayers(function _(l) { return l.id === 'iris'; });
 
     document.body.onmousedown = function onmousedown() {
@@ -14,7 +11,7 @@ export function ToolTip(viewer, tooltip, currentWaterLevel, scenario, precisionP
         --mouseDown;
     };
 
-    function buildToolTip(geoCoord, e) {      
+    function buildToolTip(geoCoord, e) {
         var visible = false;
         var precision = viewer.controls.pixelsToDegrees(precisionPx || 5);
         var i = 0;
@@ -26,8 +23,8 @@ export function ToolTip(viewer, tooltip, currentWaterLevel, scenario, precisionP
         var stroke
         var iris;
         var symb;
-        let communes = scenario.communes;        
-        let getColor = (val, h) => { 
+        let communes = scenario.communes;
+        let getColor = (val, h) => {
             let diff = h - val;
             if (diff > 0)
                 return 'green';
@@ -61,7 +58,7 @@ export function ToolTip(viewer, tooltip, currentWaterLevel, scenario, precisionP
                         tooltip.innerHTML += '<li>+ de 65 ans : ' + polygon.properties.p15_pop65p + '</li>'
                         document.getElementById(iris).style.color = getColor(currentWaterLevel.val, communes[iris].hauteur_dysf);
                         ++id;
-                    } 
+                    }
                 }
             }
             if (visible) {
@@ -84,8 +81,6 @@ export function ToolTip(viewer, tooltip, currentWaterLevel, scenario, precisionP
     function pickPosition(e) {
         buildToolTip(viewer.controls.pickGeoPosition(viewer.eventToViewCoords(e)), e);
     }
-
-    //document.addEventListener('mousemove', readPosition, false);
     document.addEventListener('mouseclick', readPosition, false);
     document.addEventListener('mousedown', pickPosition, false);
 }

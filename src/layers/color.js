@@ -20,7 +20,6 @@ function getColor(alti, nivEau){
     }
     if (alti == 9999){
         color = new THREE.Color(0x101010);
-        //console.log("9999");
     }
     return color;
 }
